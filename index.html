@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>R4 BLE APP</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#008080">
+
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #008080; color: white; margin: 0; padding: 10px; text-align: center; user-select: none; }
+        
+        #btnMain { 
+            font-size: 20px; padding: 15px 30px; border: none; border-radius: 50px; 
+            cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.3); margin-bottom: 20px; width: 80%; max-width: 300px;
+            transition: all 0.3s ease;
+        }
+        .modo-conectar { background: #ff9800; color: white; }
+        .modo-desconectar { background: #d32f2f; color: white; }
+        .modo-reconectando { background: #FFC107; color: #333; animation: pulse 1.5s infinite; }
+        
+        @keyframes pulse { 0% {transform: scale(1);} 50% {transform: scale(1.05);} 100% {transform: scale(1);} }
+
+        #status { font-weight: 500; color: #b2dfdb; margin-bottom: 10px; min-height: 20px; font-size: 14px; }
+        .panel { display: none; animation: fadeIn 0.5s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* GRID Y ESTILOS UI MEJORADOS */
+        h3 { margin-bottom: 8px; margin-top: 20px; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; }
+        
+        .grid-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 12px; }
+        .btn-pin { background-color: #f5f5f5; color: #333; border: none; padding: 15px 0; font-weight: bold; font-size: 16px; cursor: pointer; border-radius: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .btn-pin:active { background-color: #bbb; transform: translateY(2px); }
+
+        .data-section { background: rgba(0,0,0,0.1); padding: 15px; border-radius: 12px; }
+        .row { display: flex; margin-bottom: 10px; gap: 5px; }
+        .btn-action { background: #eee; border: none; width: 80px; font-weight: bold; cursor: pointer; border-radius: 6px; color: #333; }
+        input[type='text'] { flex-grow: 1; border: none; padding: 10px; font-size: 16px; border-radius: 6px; outline: none; }
+        input[type='text']:focus { box-shadow: 0 0 0 2px orange; }
+
+        .slider-row { display: flex; align-items: center; margin-bottom: 15px; }
+        .label-pin { width: 50px; font-weight: bold; font-size: 14px; color: #e0f7fa; }
+        input[type=range] { flex-grow: 1; height: 40px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <h1>R4 CONTROLLER</h1>
+    <p id="status">Listo para conectar</p>
+    
+    <button id="btnMain" class="modo-conectar" onclick="gestionarConexion()">📡 CONECTAR</button>
+
+    <div id="uiLayer" class="panel">
+        <div class="grid-container">
+            <button class="btn-pin" onclick="toggle(13)">13</button>
+            <button class="btn-pin" onclick="toggle(12)">12</button>
+            <button class="btn-pin" onclick="toggle(11)">11</button>
+            <button class="btn-pin" onclick="toggle(10)">10</button>
+            <button class="btn-pin" onclick="toggle(9)">9</button>
+            <button class="btn-pin" onclick="toggle(8)">8</button>
+            <button class="btn-pin" onclick="toggle(7)">7</button>
+            <button class="btn-pin" onclick="toggle(6)">6</button>
+            <button class="btn-pin" onclick="toggle(5)">5</button>
+            <button class="btn-pin" onclick="toggle(4)">4</button>
+            <button class="btn-pin" onclick="toggle(3)">3</button>
+            <button class="btn-pin" onclick="toggle(2)">2</button>
+        </div>
+
+        <h3>MENSAJERÍA</h3>
+        <div class="data-section">
+            <div class="row">
+                <input type="text" id="txtSend" placeholder="Enviar mensaje...">
+                <button class="btn-action" onclick="sendMsg()">➤</button>
+            </div>
+            <div class="row">
+                <input type="text" id="txtGet" readonly placeholder="Recibido..." style="background:#ffffffaa;">
+            </div>
+        </div>
+
+        <h3>DIMMERS PWM</h3>
+        <div class="data-section">
+            <div class="slider-row"><div class="label-pin">P11</div><input type="range" min="0" max="255" value="0" onchange="pwm(11, this.value)"></div>
+            <div class="slider-row"><div class="label-pin">P10</div><input type="range" min="0" max="255" value="0" onchange="pwm(10, this.value)"></div>
+            <div class="slider-row"><div class="label-pin">P09</div><input type="range" min="0" max="255" value="0" onchange="pwm(9, this.value)"></div>
+            <div class="slider-row"><div class="label-pin">P06</div><input type="range" min="0" max="255" value="0" onchange="pwm(6, this.value)"></div>
+        </div>
+    </div>
+
+    <script>
+        // REGISTRO DEL SERVICE WORKER (PWA)
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+            .then(() => console.log("Service Worker Registrado"))
+            .catch(err => console.log("Error SW:", err));
+        }
+
+        const serviceUuid = "19b10000-e8f2-537e-4f6c-d104768a1214";
+        const charToggleUuid = "19b10001-e8f2-537e-4f6c-d104768a1214";
+        const charPwmUuid = "19b10002-e8f2-537e-4f6c-d104768a1214";
+        const charMsgUuid = "19b10003-e8f2-537e-4f6c-d104768a1214";
+        
+        let device, charToggle, charPwm, charMsg;
+        let reconexionIntencional = false;
+        let intentosReconexion = 0;
+
+        async function gestionarConexion() {
+            const btn = document.getElementById('btnMain');
+            if (btn.classList.contains('modo-desconectar')) {
+                reconexionIntencional = true; 
+                if (device && device.gatt.connected) device.gatt.disconnect();
+            } else {
+                reconexionIntencional = false; 
+                conectar();
+            }
+        }
+
+        async function conectar() {
+            try {
+                if (!device) {
+                    updateStatus("Buscando...");
+                    device = await navigator.bluetooth.requestDevice({
+                        filters: [{ services: [serviceUuid] }]
+                    });
+                    device.addEventListener('gattserverdisconnected', onDesconectado);
+                }
+                updateStatus("Conectando...");
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(serviceUuid);
+                charToggle = await service.getCharacteristic(charToggleUuid);
+                charPwm    = await service.getCharacteristic(charPwmUuid);
+                charMsg    = await service.getCharacteristic(charMsgUuid);
+
+                await charMsg.startNotifications();
+                charMsg.addEventListener('characteristicvaluechanged', (e) => {
+                    document.getElementById('txtGet').value = new TextDecoder().decode(e.target.value);
+                });
+
+                conectadoExitiso();
+            } catch (err) {
+                console.error(err);
+                if (!reconexionIntencional && intentosReconexion > 0) intentarReconectar();
+                else updateStatus("Error de conexión");
+            }
+        }
+
+        function conectadoExitiso() {
+            intentosReconexion = 0;
+            const btn = document.getElementById('btnMain');
+            btn.innerText = "🔌 DESCONECTAR";
+            btn.className = "modo-desconectar";
+            document.getElementById('uiLayer').style.display = 'block';
+            updateStatus("✅ Conectado a " + device.name);
+        }
+
+        function onDesconectado() {
+            const btn = document.getElementById('btnMain');
+            if (reconexionIntencional) {
+                btn.innerText = "📡 CONECTAR";
+                btn.className = "modo-conectar";
+                document.getElementById('uiLayer').style.display = 'none';
+                updateStatus("Desconectado");
+                device = null;
+            } else {
+                intentarReconectar();
+            }
+        }
+
+        function intentarReconectar() {
+            const btn = document.getElementById('btnMain');
+            if (intentosReconexion < 5) {
+                let tiempo = Math.pow(2, intentosReconexion) * 1000;
+                btn.innerText = `⏳ (${intentosReconexion+1}/5)...`;
+                btn.className = "modo-reconectando";
+                updateStatus(`Reintentando en ${tiempo/1000}s...`);
+                setTimeout(() => { intentosReconexion++; conectar(); }, tiempo);
+            } else {
+                btn.innerText = "❌ FALLO";
+                btn.className = "modo-conectar";
+                setTimeout(() => { btn.innerText = "📡 CONECTAR"; reconexionIntencional = true; }, 3000);
+            }
+        }
+
+        function updateStatus(text) { document.getElementById('status').innerText = text; }
+        async function toggle(p) { if(device) await charToggle.writeValue(new Uint8Array([p])); }
+        async function pwm(p, v) { if(device) await charPwm.writeValue(new Uint8Array([p, v])); }
+        async function sendMsg() { if(device) await charMsg.writeValue(new TextEncoder().encode(document.getElementById('txtSend').value)); }
+    </script>
+</body>
+</html>

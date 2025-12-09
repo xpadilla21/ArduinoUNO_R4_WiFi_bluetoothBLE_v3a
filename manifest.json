@@ -1,0 +1,16 @@
+{
+  "name": "Arduino R4 Controller",
+  "short_name": "R4 BLE",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#008080",
+  "theme_color": "#008080",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2885/2885417.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
